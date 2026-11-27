@@ -175,7 +175,7 @@ export const ChannelCard: React.FC<ChannelCardProps> = ({
               {channel.isLive && <LiveBadge />}
             </div>
             <p className="text-xs text-[#9CA3AF] truncate mt-1">
-              {channel.category} · {channel.subGenre} · {availabilityText}
+              {channel.category} · {channel.region} · {channel.sourceName} · {availabilityText}
               {channel.alternateStreams.length > 1
                 ? ` · ${channel.alternateStreams.length} feeds`
                 : ''}
@@ -273,7 +273,7 @@ export const ChannelCard: React.FC<ChannelCardProps> = ({
           <p className="text-xs text-[#D1D5DB] truncate mt-2 flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5 text-[#F5B942] shrink-0" />
             <span className="truncate">
-              CH {channel.channelNumber} · {channel.subGenre}
+              CH {channel.channelNumber} · {channel.region} · {channel.sourceName}
             </span>
           </p>
         </div>

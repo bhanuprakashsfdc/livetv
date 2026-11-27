@@ -14,6 +14,7 @@ import {
   Info,
   Shield,
   X,
+  LayoutGrid,
 } from 'lucide-react';
 import { AppRoute, ChannelCategory } from '../types/channel';
 import { BrandLogo } from './BrandLogo';
@@ -59,6 +60,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Radio,
       route: { view: 'live' },
       isActive: (r) => r.view === 'live',
+    },
+    {
+      id: 'all-channels',
+      label: 'All Channels',
+      icon: LayoutGrid,
+      route: { view: 'directory' },
+      isActive: (r) => r.view === 'directory' && !r.category,
     },
     {
       id: 'news',

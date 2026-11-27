@@ -1,25 +1,208 @@
 import { CategoryTile, ChannelCategory, PlaylistMode } from '../types/channel';
 
+export interface GitHubPlaylistEndpoint {
+  name: string;
+  repo: string;
+  url: string;
+  filterTeluguOnly?: boolean;
+  priorityBoost?: number;
+}
+
 /**
- * Live public free-to-air IPTV playlist endpoints from iptv-org/iptv.
- * Inspired by iptv-org/iptv & arshadakl/streamhub data architecture.
+ * Live public free-to-air IPTV HLS playlist endpoints aggregated from multiple
+ * open-source GitHub repositories (iptv-org/iptv, Free-TV/IPTV, BuddyChewChew FAST).
  */
 export const IPTV_SOURCES: Record<
   PlaylistMode,
-  { label: string; description: string; url: string; languageLabel: string }
+  {
+    label: string;
+    description: string;
+    url: string;
+    languageLabel: string;
+    sources: GitHubPlaylistEndpoint[];
+  }
 > = {
   telugu: {
     label: 'Telugu Live',
-    description: 'Free-to-air Telugu channels from iptv-org (languages/tel.m3u)',
+    description:
+      'Free-to-air Telugu channels aggregated from iptv-org & Free-TV GitHub HLS playlists',
     url: 'https://iptv-org.github.io/iptv/languages/tel.m3u',
     languageLabel: 'Telugu',
+    sources: [
+      {
+        name: 'iptv-org',
+        repo: 'iptv-org/iptv',
+        url: 'https://iptv-org.github.io/iptv/languages/tel.m3u',
+      },
+      {
+        name: 'Free-TV',
+        repo: 'Free-TV/IPTV',
+        url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_india.m3u8',
+        filterTeluguOnly: true,
+        priorityBoost: 2,
+      },
+    ],
   },
   india: {
     label: 'India Mode',
-    description: 'All Indian national & regional channels from iptv-org (countries/in.m3u)',
+    description:
+      'Indian national & regional HLS channels aggregated from iptv-org & Free-TV GitHub repos',
     url: 'https://iptv-org.github.io/iptv/countries/in.m3u',
     languageLabel: 'India',
+    sources: [
+      {
+        name: 'Free-TV',
+        repo: 'Free-TV/IPTV',
+        url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_india.m3u8',
+        priorityBoost: 5,
+      },
+      {
+        name: 'iptv-org',
+        repo: 'iptv-org/iptv',
+        url: 'https://iptv-org.github.io/iptv/countries/in.m3u',
+      },
+    ],
   },
+  global: {
+    label: 'Global Mode',
+    description:
+      'Worldwide free-to-air & FAST HLS channels aggregated from Free-TV, iptv-org, Samsung TV Plus & Pluto TV GitHub repos',
+    url: 'https://iptv-org.github.io/iptv/index.m3u',
+    languageLabel: 'Global',
+    sources: [
+      {
+        name: 'Free-TV',
+        repo: 'Free-TV/IPTV',
+        url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
+        priorityBoost: 15,
+      },
+      {
+        name: 'Samsung TV Plus',
+        repo: 'BuddyChewChew/app-m3u-generator',
+        url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_all.m3u',
+        priorityBoost: 8,
+      },
+      {
+        name: 'Pluto TV',
+        repo: 'BuddyChewChew/app-m3u-generator',
+        url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_all.m3u',
+        priorityBoost: 6,
+      },
+      {
+        name: 'iptv-org',
+        repo: 'iptv-org/iptv',
+        url: 'https://iptv-org.github.io/iptv/index.m3u',
+      },
+    ],
+  },
+};
+
+export const EXTRA_GITHUB_PRESETS: Array<{
+  label: string;
+  repo: string;
+  url: string;
+}> = [
+  {
+    label: 'Free-TV Global Curated HD',
+    repo: 'Free-TV/IPTV',
+    url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
+  },
+  {
+    label: 'iptv-org Global Master',
+    repo: 'iptv-org/iptv',
+    url: 'https://iptv-org.github.io/iptv/index.m3u',
+  },
+  {
+    label: 'Samsung TV Plus Global',
+    repo: 'BuddyChewChew/app-m3u-generator',
+    url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_all.m3u',
+  },
+  {
+    label: 'Pluto TV Global',
+    repo: 'BuddyChewChew/app-m3u-generator',
+    url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_all.m3u',
+  },
+  {
+    label: 'Plex Live TV Global',
+    repo: 'BuddyChewChew/app-m3u-generator',
+    url: 'https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plex_all.m3u',
+  },
+  {
+    label: 'iptv-org Global News',
+    repo: 'iptv-org/iptv',
+    url: 'https://iptv-org.github.io/iptv/categories/news.m3u',
+  },
+  {
+    label: 'iptv-org Global Movies',
+    repo: 'iptv-org/iptv',
+    url: 'https://iptv-org.github.io/iptv/categories/movies.m3u',
+  },
+  {
+    label: 'iptv-org Global Sports',
+    repo: 'iptv-org/iptv',
+    url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
+  },
+];
+
+export const COUNTRY_NAMES: Record<string, string> = {
+  IN: 'India',
+  US: 'United States',
+  GB: 'United Kingdom',
+  UK: 'United Kingdom',
+  CA: 'Canada',
+  AU: 'Australia',
+  DE: 'Germany',
+  FR: 'France',
+  ES: 'Spain',
+  IT: 'Italy',
+  JP: 'Japan',
+  KR: 'South Korea',
+  AE: 'UAE',
+  SG: 'Singapore',
+  NL: 'Netherlands',
+  BR: 'Brazil',
+  MX: 'Mexico',
+  RU: 'Russia',
+  TR: 'Turkey',
+  ZA: 'South Africa',
+  NZ: 'New Zealand',
+  IE: 'Ireland',
+  SE: 'Sweden',
+  NO: 'Norway',
+  DK: 'Denmark',
+  FI: 'Finland',
+  CH: 'Switzerland',
+  AT: 'Austria',
+  BE: 'Belgium',
+  PL: 'Poland',
+  PT: 'Portugal',
+  AR: 'Argentina',
+  CO: 'Colombia',
+  CL: 'Chile',
+  PK: 'Pakistan',
+  BD: 'Bangladesh',
+  LK: 'Sri Lanka',
+  MY: 'Malaysia',
+  ID: 'Indonesia',
+  PH: 'Philippines',
+  TH: 'Thailand',
+  VN: 'Vietnam',
+  CN: 'China',
+  TW: 'Taiwan',
+  HK: 'Hong Kong',
+  SA: 'Saudi Arabia',
+  QA: 'Qatar',
+  EG: 'Egypt',
+  NG: 'Nigeria',
+  KE: 'Kenya',
+  IL: 'Israel',
+  GR: 'Greece',
+  UA: 'Ukraine',
+  RO: 'Romania',
+  CZ: 'Czechia',
+  HU: 'Hungary',
+  AL: 'Albania',
+  INT: 'International',
 };
 
 export const HERO_BANNER_IMAGE =
@@ -173,6 +356,33 @@ export const POPULARITY_PRIORITY_PATTERNS: RegExp[] = [
   /^mahaa\s*news/i,
   /^hmtv/i,
   /^raj\s*musix/i,
+];
+
+export const GLOBAL_POPULARITY_PATTERNS: RegExp[] = [
+  /^bbc\s*(news|world)/i,
+  /^al\s*jazeera\s*english/i,
+  /^euronews\s*english/i,
+  /^dw\s*english/i,
+  /^france\s*24\s*english/i,
+  /^bloomberg/i,
+  /^abc\s*news\s*live/i,
+  /^cbs\s*news/i,
+  /^nbc\s*news\s*now/i,
+  /^sky\s*news/i,
+  /^nhk\s*world/i,
+  /^wion/i,
+  /^cnn/i,
+  /^nasa/i,
+  /^red\s*bull\s*tv/i,
+  /^dd\s*india/i,
+  /^ndtv/i,
+  /^tv9\s*telugu/i,
+  /^cna\b/i,
+  /^rt\s*documentary/i,
+  /^tastemade/i,
+  /^failarmy/i,
+  /^rakuten/i,
+  /^plex/i,
 ];
 
 export function formatRelativeWatchTime(timestamp: number): string {

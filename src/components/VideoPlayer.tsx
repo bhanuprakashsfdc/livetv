@@ -65,6 +65,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const volumeRef = useRef<number>(defaultVolume);
   const isMutedRef = useRef<boolean>(false);
   const pendingChannelSwitchRef = useRef<'prev' | 'next' | null>(null);
+  const triedFeedsRef = useRef<Set<number>>(new Set());
 
   const [selectedFeedIndex, setSelectedFeedIndex] = useState<number>(0);
   const [status, setStatus] = useState<PlayerStatus>('loading');
@@ -101,6 +102,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, []);
 
   useEffect(() => {
+    triedFeedsRef.current = new Set();
     setSelectedFeedIndex(0);
     setQualityLevels([]);
     setCurrentLevel(-1);
@@ -218,20 +220,61 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           return;
         }
 
+        const tryAlternateFeed = () => {
+          if (
+            autoReconnect &&
+            !hasCustomOverride &&
+            channel.alternateStreams.length > 1
+          ) {
+            triedFeedsRef.current.add(selectedFeedIndex);
+            const nextUntried = channel.alternateStreams.findIndex(
+              (_, i) => !triedFeedsRef.current.has(i)
+            );
+            if (nextUntried !== -1) {
+              const nextFeed = channel.alternateStreams[nextUntried];
+              onNotify(
+                `Trying backup HLS feed (${nextFeed.sourceName}) for ${channel.name}...`
+              );
+              setSelectedFeedIndex(nextUntried);
+              return true;
+            }
+          }
+          return false;
+        };
+
+        hls.destroy();
+        hlsRef.current = null;
+
+        if (tryAlternateFeed()) {
+          return;
+        }
+
         const geoHint = channel.isGeoBlocked
-          ? ' This feed is flagged as geo-restricted by iptv-org.'
+          ? ' This feed is flagged as geo-restricted.'
           : '';
         setErrorDetail(
           `Unable to play this HLS stream directly in the browser (the broadcaster server may restrict browser CORS or be offline).${geoHint}`
         );
         setStatus('error');
-        hls.destroy();
-        hlsRef.current = null;
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl') || !isHlsUrl) {
       video.src = activeStreamUrl;
       const handleLoaded = () => startPlayback();
       const handleError = () => {
+        if (
+          autoReconnect &&
+          !hasCustomOverride &&
+          channel.alternateStreams.length > 1
+        ) {
+          triedFeedsRef.current.add(selectedFeedIndex);
+          const nextUntried = channel.alternateStreams.findIndex(
+            (_, i) => !triedFeedsRef.current.has(i)
+          );
+          if (nextUntried !== -1) {
+            setSelectedFeedIndex(nextUntried);
+            return;
+          }
+        }
         setErrorDetail(
           'This broadcast feed could not be played in the current browser.'
         );
@@ -623,7 +666,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             Connecting to {channel.name}...
           </p>
           <p className="text-xs text-[#9CA3AF] mt-1">
-            Loading live {activeQualityLabel} HLS stream from iptv-org
+            Loading live {activeQualityLabel} HLS stream from{' '}
+            {activeFeed?.sourceName || channel.sourceName}
           </p>
         </div>
       )}
@@ -728,7 +772,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   Stream Source — {channel.name}
                 </h3>
                 <p className="text-xs text-[#9CA3AF] mt-1">
-                  Loaded dynamically from <code className="font-mono text-[#F5B942]">iptv-org</code>. Paste an alternate authorized HLS (.m3u8) URL below to override locally.
+                  Loaded dynamically from{' '}
+                  <code className="font-mono text-[#F5B942]">
+                    {activeFeed?.sourceName || channel.sourceName}
+                  </code>
+                  . Paste an alternate authorized HLS (.m3u8) URL below to override locally.
                 </p>
               </div>
               <button

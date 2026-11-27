@@ -7,18 +7,52 @@ import {
 import {
   CATEGORY_BACKDROPS,
   CHANNEL_BACKDROP_OVERRIDES,
+  COUNTRY_NAMES,
+  GLOBAL_POPULARITY_PATTERNS,
+  GitHubPlaylistEndpoint,
   IPTV_SOURCES,
   POPULARITY_PRIORITY_PATTERNS,
 } from './data';
 
-const CACHE_PREFIX = 'tltv_iptv_cache_v1_';
+const CACHE_PREFIX = 'tltv_iptv_cache_v2_';
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_LOCALSTORAGE_CHANNELS = 1200;
 
 interface CachedPlaylist {
   fetchedAt: number;
   sourceUrl: string;
+  activeSources: string[];
   channels: Channel[];
 }
+
+interface RawParsedEntry {
+  tvgId: string;
+  tvgCountry: string;
+  logo: string;
+  groupTitle: string;
+  rawTitle: string;
+  cleanName: string;
+  quality: string;
+  isGeoBlocked: boolean;
+  not247: boolean;
+  streamUrl: string;
+  sourceName: string;
+  priorityBoost: number;
+  httpReferrer?: string;
+  httpUserAgent?: string;
+}
+
+const memoryCache = new Map<string, CachedPlaylist>();
+
+const TELUGU_MATCH_REGEX =
+  /(telugu|saptagiri|yadagiri|tv9\s*telugu|ntv|tv5|abn|sakshi|t\s*news|etv|svbc|bhakthi|v6\s*news|10\s*tv|hmtv|mahaa|star\s*maa|zee\s*telugu|gemini|kushi|t-sat|tsat|cvr\s*news|prime9|99tv|big\s*tv|6\s*tv|raj\s*musix\s*telugu|hindu\s*dharmam|subhavaartha|calvary|divyavani|aradhana)/i;
+
+const NON_HLS_PAGE_REGEX =
+  /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be|twitch\.tv|dailymotion\.com|vimeo\.com|facebook\.com)\//i;
+
+const COUNTRY_NAME_TO_CODE = new Map<string, string>(
+  Object.entries(COUNTRY_NAMES).map(([code, name]) => [name.toLowerCase(), code])
+);
 
 function slugify(value: string): string {
   return value
@@ -36,22 +70,42 @@ function extractAttr(extinfLine: string, attrName: string): string {
 function mapGroupToCategory(groupTitle: string, channelName: string): ChannelCategory {
   const combined = `${groupTitle} ${channelName}`.toLowerCase();
 
-  if (/(news|vartalu|bulletin|tv9|ntv|tv5|abn|sakshi|hmtv|v6|10\s*tv|t\s*news|mahaa\s*news|prime9|brk\s*news|cvr\s*news|big\s*tv|99tv|6\s*tv)/i.test(combined)) {
+  if (
+    /(news|vartalu|bulletin|tv9|ntv|tv5|abn|sakshi|hmtv|v6|10\s*tv|t\s*news|mahaa\s*news|prime9|brk\s*news|cvr\s*news|big\s*tv|99tv|6\s*tv|cnn|bbc\s*(news|world)|euronews|al\s*jazeera|bloomberg|cnbc|msnbc|fox\s*news|sky\s*news|france\s*24|dw\b|wion|nhk\s*world|ndtv|aaj\s*tak|cna\b|abc\s*news|cbs\s*news|nbc\s*news|weather)/i.test(
+      combined
+    )
+  ) {
     return 'News';
   }
-  if (/(relig|devot|bhakt|spiritual|svbc|aastha|dharmam|calvary|divyavani|subhavaartha|nireekshana|chhaya\s*chitram)/i.test(combined)) {
+  if (
+    /(relig|devot|bhakt|spiritual|svbc|aastha|dharmam|calvary|divyavani|subhavaartha|nireekshana|church|gospel|islam|quran|tbn|ewtn|god\s*tv)/i.test(
+      combined
+    )
+  ) {
     return 'Devotional';
   }
-  if (/(movie|cinema|film|tolly)/i.test(combined)) {
+  if (
+    /(movie|cinema|film|tolly|bolly|holly|action|thriller|horror|sci-fi|western|classic\s*film|rakuten|cine)/i.test(
+      combined
+    )
+  ) {
     return 'Movies';
   }
-  if (/(music|musix|beats|songs)/i.test(combined)) {
+  if (/(music|musix|beats|songs|mtv|vh1|vevo|concert|radio|hits|jazz|rock|pop)/i.test(combined)) {
     return 'Music';
   }
-  if (/(kid|animation|cartoon|yay|bal\s*bharat|kushi)/i.test(combined)) {
+  if (
+    /(kid|animation|cartoon|yay|bal\s*bharat|kushi|nick|disney|pbs\s*kids|baby|junior|toons|anime)/i.test(
+      combined
+    )
+  ) {
     return 'Kids';
   }
-  if (/(educat|documentary|science|history|vidya|nipuna|t-sat|tsat|health)/i.test(combined)) {
+  if (
+    /(educat|documentary|science|history|vidya|nipuna|t-sat|tsat|health|nasa|nature|wildlife|discover|curiosity|smithsonian|travel|cooking|food|business|finance|parliament|legislative)/i.test(
+      combined
+    )
+  ) {
     return 'Educational';
   }
   return 'Entertainment';
@@ -78,7 +132,7 @@ function getCategoryAccent(category: ChannelCategory): string {
 
 function deriveShortCode(name: string): string {
   const cleaned = name
-    .replace(/\b(HD|SD|Telugu|TV|India|News)\b/gi, (m) =>
+    .replace(/\b(HD|SD|FHD|UHD|4K|Telugu|TV|India|News|Live)\b/gi, (m) =>
       name.split(/\s+/).length <= 2 ? m : ''
     )
     .trim();
@@ -97,6 +151,7 @@ function deriveShortCode(name: string): string {
 function parseQualityScore(quality: string): number {
   const num = parseInt(quality, 10);
   if (!Number.isNaN(num)) return num;
+  if (/4k|2160/i.test(quality)) return 2160;
   if (/1080|fhd/i.test(quality)) return 1080;
   if (/720|hd/i.test(quality)) return 720;
   if (/576|sd/i.test(quality)) return 576;
@@ -110,40 +165,100 @@ function pickBackdrop(name: string, category: ChannelCategory): string {
   return CATEGORY_BACKDROPS[category];
 }
 
-function computePopularityRank(name: string, quality: string, isGeoBlocked: boolean, index: number): number {
-  for (let i = 0; i < POPULARITY_PRIORITY_PATTERNS.length; i++) {
-    if (POPULARITY_PRIORITY_PATTERNS[i].test(name)) {
-      return i + 1 + (isGeoBlocked ? 100 : 0);
+function inferCountryAndRegion(
+  entry: RawParsedEntry,
+  mode: PlaylistMode
+): { countryCode: string; region: string } {
+  if (mode === 'telugu') {
+    const region = /telangana|yadagiri|t\s*news|v6/i.test(entry.cleanName)
+      ? 'Telangana'
+      : /andhra|saptagiri/i.test(entry.cleanName)
+        ? 'Andhra Pradesh'
+        : 'AP & Telangana';
+    return { countryCode: 'IN', region };
+  }
+
+  if (mode === 'india') {
+    const region = /telangana|yadagiri|t\s*news|v6/i.test(entry.cleanName)
+      ? 'Telangana'
+      : /andhra|saptagiri/i.test(entry.cleanName)
+        ? 'Andhra Pradesh'
+        : 'India';
+    return { countryCode: 'IN', region };
+  }
+
+  // Global mode: check tvg-country first
+  if (entry.tvgCountry) {
+    const code = entry.tvgCountry.split(';')[0].trim().toUpperCase();
+    if (code.length === 2 || code === 'INT') {
+      return {
+        countryCode: code === 'UK' ? 'GB' : code,
+        region: COUNTRY_NAMES[code] ?? code,
+      };
     }
   }
-  const hdBonus = parseQualityScore(quality) >= 720 ? 0 : 25;
-  return 40 + hdBonus + (isGeoBlocked ? 100 : 0) + index;
+
+  // Check country suffix in tvg-id (e.g. "BBCNews.uk@SD" or "CNN.us")
+  if (entry.tvgId) {
+    const beforeAt = entry.tvgId.split('@')[0];
+    const dotMatch = beforeAt.match(/\.([a-z]{2})$/i);
+    if (dotMatch) {
+      const code = dotMatch[1].toUpperCase();
+      return {
+        countryCode: code === 'UK' ? 'GB' : code,
+        region: COUNTRY_NAMES[code] ?? code,
+      };
+    }
+  }
+
+  // Check if group-title itself is a known country name (Free-TV, Samsung TV Plus, Plex)
+  const groupLower = entry.groupTitle.split(';')[0].trim().toLowerCase();
+  const matchedCode = COUNTRY_NAME_TO_CODE.get(groupLower);
+  if (matchedCode) {
+    return {
+      countryCode: matchedCode === 'UK' ? 'GB' : matchedCode,
+      region: COUNTRY_NAMES[matchedCode] ?? entry.groupTitle,
+    };
+  }
+
+  return { countryCode: 'INT', region: 'International' };
 }
 
-/**
- * Parses an iptv-org M3U playlist into structured Channel objects,
- * merging multi-feed variants of the same channel into `alternateStreams`.
- */
-export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channel[] {
+function computePopularityRank(
+  name: string,
+  quality: string,
+  isGeoBlocked: boolean,
+  hasLogo: boolean,
+  priorityBoost: number,
+  mode: PlaylistMode,
+  index: number
+): number {
+  const patterns =
+    mode === 'global' ? GLOBAL_POPULARITY_PATTERNS : POPULARITY_PRIORITY_PATTERNS;
+
+  for (let i = 0; i < patterns.length; i++) {
+    if (patterns[i].test(name)) {
+      return i + 1 + (isGeoBlocked ? 150 : 0) - Math.min(priorityBoost, i);
+    }
+  }
+
+  const hdBonus = parseQualityScore(quality) >= 720 ? 0 : 25;
+  const logoBonus = hasLogo ? 0 : 35;
+  const geoPenalty = isGeoBlocked ? 200 : 0;
+  return 50 + hdBonus + logoBonus + geoPenalty - priorityBoost + index * 0.01;
+}
+
+function parseSingleM3UText(
+  m3uContent: string,
+  sourceName: string,
+  priorityBoost = 0,
+  filterTeluguOnly = false
+): RawParsedEntry[] {
   const normalized = m3uContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lines = normalized
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
-
-  interface RawParsedEntry {
-    tvgId: string;
-    logo: string;
-    groupTitle: string;
-    rawTitle: string;
-    cleanName: string;
-    quality: string;
-    isGeoBlocked: boolean;
-    not247: boolean;
-    streamUrl: string;
-    httpReferrer?: string;
-    httpUserAgent?: string;
-  }
 
   const rawEntries: RawParsedEntry[] = [];
   let currentExtinf: string | null = null;
@@ -172,33 +287,57 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
       continue;
     }
 
-    // Stream URL line
     if (currentExtinf && /^https?:\/\//i.test(line)) {
+      // Skip non-HLS web page URLs (e.g. YouTube/Twitch links in Free-TV)
+      if (NON_HLS_PAGE_REGEX.test(line)) {
+        currentExtinf = null;
+        currentUserAgent = undefined;
+        currentReferrer = undefined;
+        continue;
+      }
+
       const commaIdx = currentExtinf.lastIndexOf(',');
       const rawTitle =
         commaIdx !== -1 ? currentExtinf.slice(commaIdx + 1).trim() : 'Untitled Channel';
 
       const tvgId = extractAttr(currentExtinf, 'tvg-id');
+      const tvgCountry = extractAttr(currentExtinf, 'tvg-country');
       const logo = extractAttr(currentExtinf, 'tvg-logo');
       const groupTitle = extractAttr(currentExtinf, 'group-title') || 'General';
 
-      const isGeoBlocked = /\[geo-blocked\]/i.test(rawTitle);
+      const isGeoBlocked = /\[geo-blocked\]|Ⓖ/i.test(rawTitle);
       const not247 = /\[not\s*24\/7\]/i.test(rawTitle);
       const qualityMatch = rawTitle.match(/\((\d{3,4}p)\)/i);
       const quality = qualityMatch
         ? qualityMatch[1].toLowerCase()
-        : /\bHD\b/.test(rawTitle)
-          ? 'HD'
-          : 'SD';
+        : /\b(4K|UHD)\b/i.test(rawTitle)
+          ? '4K'
+          : /\b(FHD|1080)\b/i.test(rawTitle)
+            ? '1080p'
+            : /\bHD\b/i.test(rawTitle)
+              ? 'HD'
+              : sourceName === 'Free-TV' || sourceName === 'Samsung TV Plus'
+                ? 'HD'
+                : 'SD';
 
       const cleanName = rawTitle
         .replace(/\s*\(\d{3,4}p\)/gi, '')
         .replace(/\s*\[[^\]]+\]/g, '')
+        .replace(/[ⓈⓎⓉⒼⓋ]/g, '')
         .replace(/\s*\(India\)/gi, '')
+        .replace(/\s+/g, ' ')
         .trim();
+
+      if (filterTeluguOnly && !TELUGU_MATCH_REGEX.test(`${cleanName} ${groupTitle} ${tvgId}`)) {
+        currentExtinf = null;
+        currentUserAgent = undefined;
+        currentReferrer = undefined;
+        continue;
+      }
 
       rawEntries.push({
         tvgId,
+        tvgCountry,
         logo,
         groupTitle,
         rawTitle,
@@ -207,6 +346,8 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
         isGeoBlocked,
         not247,
         streamUrl: line,
+        sourceName,
+        priorityBoost,
         httpReferrer: currentReferrer,
         httpUserAgent: currentUserAgent,
       });
@@ -217,16 +358,28 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
     }
   }
 
-  // Group streams by canonical channel key so multi-stream channels appear once with feed switcher
+  return rawEntries;
+}
+
+function buildChannelsFromEntries(rawEntries: RawParsedEntry[], mode: PlaylistMode): Channel[] {
   const grouped = new Map<string, RawParsedEntry[]>();
 
   for (const entry of rawEntries) {
+    // Group by normalized channel name + country (or tvg-id prefix) so multi-repo HLS feeds merge cleanly
+    const normalizedName = slugify(entry.cleanName);
+    const { countryCode } = inferCountryAndRegion(entry, mode);
     const baseKey =
-      (entry.tvgId ? entry.tvgId.split('@')[0].toLowerCase() : '') ||
-      slugify(entry.cleanName);
+      mode === 'global'
+        ? `${normalizedName || slugify(entry.tvgId)}-${countryCode.toLowerCase()}`
+        : (entry.tvgId ? slugify(entry.tvgId.split('@')[0]) : '') || normalizedName;
+
+    if (!baseKey) continue;
     const existing = grouped.get(baseKey);
     if (existing) {
-      existing.push(entry);
+      // Avoid exact duplicate stream URLs
+      if (!existing.some((item) => item.streamUrl === entry.streamUrl)) {
+        existing.push(entry);
+      }
     } else {
       grouped.set(baseKey, [entry]);
     }
@@ -237,47 +390,60 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
   let idx = 0;
 
   for (const [baseKey, variants] of grouped.entries()) {
-    // Prefer non-geoblocked & highest quality stream as primary
+    // Prefer non-geoblocked, higher-boosted source, and higher resolution as primary HLS stream
     const sortedVariants = [...variants].sort((a, b) => {
       if (a.isGeoBlocked !== b.isGeoBlocked) return a.isGeoBlocked ? 1 : -1;
+      if (a.priorityBoost !== b.priorityBoost) return b.priorityBoost - a.priorityBoost;
       return parseQualityScore(b.quality) - parseQualityScore(a.quality);
     });
 
     const primary = sortedVariants[0];
-    const category = mapGroupToCategory(primary.groupTitle, primary.cleanName);
+    const bestLogo = sortedVariants.find((v) => v.logo)?.logo ?? '';
+    const bestGroupTitle =
+      sortedVariants.find(
+        (v) =>
+          v.groupTitle &&
+          v.groupTitle !== 'Undefined' &&
+          v.groupTitle !== 'General' &&
+          !COUNTRY_NAME_TO_CODE.has(v.groupTitle.toLowerCase())
+      )?.groupTitle ?? primary.groupTitle;
+
+    const category = mapGroupToCategory(bestGroupTitle, primary.cleanName);
     const accentColor = getCategoryAccent(category);
     const id = slugify(baseKey || primary.cleanName) || `channel-${idx + 1}`;
+    const { countryCode, region } = inferCountryAndRegion(primary, mode);
+    const maxBoost = Math.max(...sortedVariants.map((v) => v.priorityBoost));
+
     const popularityRank = computePopularityRank(
       primary.cleanName,
       primary.quality,
       primary.isGeoBlocked,
+      Boolean(bestLogo),
+      maxBoost,
+      mode,
       idx
     );
 
     const alternateStreams: StreamVariant[] = sortedVariants.map((v, vIdx) => ({
       url: v.streamUrl,
       quality: v.quality,
+      sourceName: v.sourceName,
       label:
         sortedVariants.length > 1
-          ? `Feed ${vIdx + 1} (${v.quality}${v.isGeoBlocked ? ' · Geo' : ''})`
-          : `${v.quality} Live`,
+          ? `${v.sourceName} · ${v.quality}${v.isGeoBlocked ? ' (Geo)' : ''}`
+          : `${v.sourceName} · ${v.quality}`,
       isGeoBlocked: v.isGeoBlocked,
       not247: v.not247,
     }));
 
     const subGenre =
-      primary.groupTitle && primary.groupTitle !== 'Undefined'
-        ? primary.groupTitle.replace(/;/g, ' & ')
+      bestGroupTitle &&
+      bestGroupTitle !== 'Undefined' &&
+      !COUNTRY_NAME_TO_CODE.has(bestGroupTitle.toLowerCase())
+        ? bestGroupTitle.replace(/;/g, ' & ')
         : category;
 
-    const region =
-      /telangana|yadagiri|t\s*news|v6/i.test(primary.cleanName)
-        ? 'Telangana'
-        : /andhra|saptagiri/i.test(primary.cleanName)
-          ? 'Andhra Pradesh'
-          : mode === 'telugu'
-            ? 'AP & Telangana'
-            : 'India';
+    const uniqueSourceNames = Array.from(new Set(sortedVariants.map((v) => v.sourceName)));
 
     channels.push({
       id,
@@ -288,11 +454,12 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
       shortCode: deriveShortCode(primary.cleanName),
       accentColor,
       category,
-      rawGroupTitle: primary.groupTitle,
+      rawGroupTitle: bestGroupTitle,
       subGenre,
-      language: languageLabel,
-      country: 'IN',
-      logo: primary.logo,
+      language: mode === 'global' ? region : languageLabel,
+      country: countryCode,
+      sourceName: primary.sourceName,
+      logo: bestLogo,
       thumbnail: pickBackdrop(primary.cleanName, category),
       streamType: 'hls',
       streamUrl: primary.streamUrl,
@@ -307,7 +474,7 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
       authorizedSource: true,
       popularityRank,
       featuredInLiveRail: false,
-      description: `${primary.cleanName} is a publicly listed ${languageLabel} ${subGenre.toLowerCase()} television broadcast sourced live from the open-source iptv-org directory (${primary.quality} HLS stream).`,
+      description: `${primary.cleanName} is a publicly listed ${region} ${subGenre.toLowerCase()} live HLS broadcast sourced via ${uniqueSourceNames.join(' & ')} (${primary.quality}).`,
       broadcaster: primary.tvgId ? primary.tvgId.split('.')[0] : primary.cleanName,
       region,
     });
@@ -315,18 +482,34 @@ export function parseM3UPlaylist(m3uContent: string, mode: PlaylistMode): Channe
     idx += 1;
   }
 
-  // Sort by computed prominence rank, assign clean sequential channel numbers, and flag top Live Now rail
   channels.sort((a, b) => a.popularityRank - b.popularityRank);
 
   channels.forEach((ch, i) => {
     ch.channelNumber = String(101 + i);
-    ch.featuredInLiveRail = i < 12 && !ch.isGeoBlocked;
+    ch.featuredInLiveRail = i < 16 && !ch.isGeoBlocked;
   });
 
   return channels;
 }
 
+/**
+ * Parses a single M3U playlist text into structured Channel objects.
+ */
+export function parseM3UPlaylist(
+  m3uContent: string,
+  mode: PlaylistMode,
+  sourceName = 'iptv-org'
+): Channel[] {
+  const entries = parseSingleM3UText(m3uContent, sourceName, 0, false);
+  return buildChannelsFromEntries(entries, mode);
+}
+
 function readCache(cacheKey: string): CachedPlaylist | null {
+  const inMemory = memoryCache.get(cacheKey);
+  if (inMemory && Date.now() - inMemory.fetchedAt < CACHE_TTL_MS) {
+    return inMemory;
+  }
+
   try {
     const raw = window.localStorage.getItem(cacheKey);
     if (!raw) return null;
@@ -337,6 +520,7 @@ function readCache(cacheKey: string): CachedPlaylist | null {
       parsed.channels.length > 0 &&
       Date.now() - parsed.fetchedAt < CACHE_TTL_MS
     ) {
+      memoryCache.set(cacheKey, parsed);
       return parsed;
     }
   } catch {
@@ -346,21 +530,44 @@ function readCache(cacheKey: string): CachedPlaylist | null {
 }
 
 function writeCache(cacheKey: string, data: CachedPlaylist): void {
+  memoryCache.set(cacheKey, data);
+
+  // Skip localStorage persistence for very large Global playlists to avoid storage quota stalls
+  if (data.channels.length > MAX_LOCALSTORAGE_CHANNELS) {
+    return;
+  }
+
   try {
     window.localStorage.setItem(cacheKey, JSON.stringify(data));
   } catch {
-    // Ignore quota errors (e.g. large India playlist in restricted storage)
+    // Ignore quota errors
   }
+}
+
+async function fetchEndpointText(url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: { Accept: 'audio/x-mpegurl, text/plain, */*' },
+  });
+  if (!response.ok) {
+    throw new Error(`Playlist request failed (${response.status}) for ${url}`);
+  }
+  return response.text();
 }
 
 export async function fetchIptvChannels(options: {
   mode: PlaylistMode;
   customPlaylistUrl?: string;
   forceRefresh?: boolean;
-}): Promise<{ channels: Channel[]; sourceUrl: string; fetchedAt: number }> {
-  const sourceUrl =
-    options.customPlaylistUrl?.trim() || IPTV_SOURCES[options.mode].url;
-  const cacheKey = `${CACHE_PREFIX}${options.mode}_${slugify(sourceUrl).slice(0, 40)}`;
+}): Promise<{
+  channels: Channel[];
+  sourceUrl: string;
+  activeSources: string[];
+  fetchedAt: number;
+}> {
+  const customUrl = options.customPlaylistUrl?.trim() || '';
+  const modeConfig = IPTV_SOURCES[options.mode];
+  const sourceUrl = customUrl || modeConfig.url;
+  const cacheKey = `${CACHE_PREFIX}${options.mode}_${slugify(sourceUrl).slice(0, 48)}`;
 
   if (!options.forceRefresh) {
     const cached = readCache(cacheKey);
@@ -368,28 +575,83 @@ export async function fetchIptvChannels(options: {
       return {
         channels: cached.channels,
         sourceUrl: cached.sourceUrl,
+        activeSources: cached.activeSources,
         fetchedAt: cached.fetchedAt,
       };
     }
   }
 
-  const response = await fetch(sourceUrl, {
-    headers: { Accept: 'audio/x-mpegurl, text/plain, */*' },
-  });
+  const endpoints: GitHubPlaylistEndpoint[] = customUrl
+    ? [
+        {
+          name: 'Custom M3U',
+          repo: customUrl,
+          url: customUrl,
+        },
+      ]
+    : modeConfig.sources;
 
-  if (!response.ok) {
-    throw new Error(`Playlist request failed (${response.status})`);
+  const settled = await Promise.allSettled(
+    endpoints.map(async (ep) => {
+      const text = await fetchEndpointText(ep.url);
+      return {
+        endpoint: ep,
+        entries: parseSingleM3UText(
+          text,
+          ep.name,
+          ep.priorityBoost ?? 0,
+          Boolean(ep.filterTeluguOnly)
+        ),
+      };
+    })
+  );
+
+  const combinedEntries: RawParsedEntry[] = [];
+  const activeSources: string[] = [];
+  const errors: string[] = [];
+
+  for (const result of settled) {
+    if (result.status === 'fulfilled') {
+      if (result.value.entries.length > 0) {
+        combinedEntries.push(...result.value.entries);
+        activeSources.push(result.value.endpoint.name);
+      }
+    } else {
+      errors.push(
+        result.reason instanceof Error ? result.reason.message : String(result.reason)
+      );
+    }
   }
 
-  const m3uText = await response.text();
-  const channels = parseM3UPlaylist(m3uText, options.mode);
+  if (combinedEntries.length === 0) {
+    throw new Error(
+      errors[0] || 'No playable HLS channels were found across the configured playlists.'
+    );
+  }
+
+  const channels = buildChannelsFromEntries(combinedEntries, options.mode);
 
   if (channels.length === 0) {
-    throw new Error('No playable channels were found in the M3U playlist.');
+    throw new Error('No playable HLS channels were found in the M3U playlists.');
   }
 
   const fetchedAt = Date.now();
-  writeCache(cacheKey, { fetchedAt, sourceUrl, channels });
+  const payload: CachedPlaylist = {
+    fetchedAt,
+    sourceUrl:
+      customUrl ||
+      (activeSources.length > 1
+        ? `${activeSources.join(' + ')} (${endpoints.length} GitHub playlists)`
+        : modeConfig.url),
+    activeSources,
+    channels,
+  };
+  writeCache(cacheKey, payload);
 
-  return { channels, sourceUrl, fetchedAt };
+  return {
+    channels: payload.channels,
+    sourceUrl: payload.sourceUrl,
+    activeSources: payload.activeSources,
+    fetchedAt,
+  };
 }

@@ -1,12 +1,14 @@
 import React, { useRef, useEffect } from 'react';
-import { Menu, Search, X, LayoutGrid } from 'lucide-react';
-import { AppRoute } from '../types/channel';
+import { Menu, Search, X, LayoutGrid, Globe } from 'lucide-react';
+import { AppRoute, PlaylistMode } from '../types/channel';
 import { BrandLogo } from './BrandLogo';
 
 interface TopHeaderProps {
   searchQuery: string;
+  playlistMode: PlaylistMode;
   onSearchChange: (value: string) => void;
   onSearchSubmit: (value: string) => void;
+  onChangePlaylistMode: (mode: PlaylistMode) => void;
   onOpenDrawer: () => void;
   onNavigate: (route: AppRoute) => void;
   route: AppRoute;
@@ -14,8 +16,10 @@ interface TopHeaderProps {
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   searchQuery,
+  playlistMode,
   onSearchChange,
   onSearchSubmit,
+  onChangePlaylistMode,
   onOpenDrawer,
   onNavigate,
   route,
@@ -72,14 +76,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onNavigate({ view: 'directory', category: 'Educational' })}
-              className={`text-sm font-medium transition-colors whitespace-nowrap shrink-0 ${
-                route.view === 'directory' && route.category === 'Educational'
-                  ? 'text-white'
+              onClick={() => {
+                if (playlistMode !== 'global') {
+                  onChangePlaylistMode('global');
+                }
+                onNavigate({ view: 'directory' });
+              }}
+              className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap shrink-0 ${
+                playlistMode === 'global'
+                  ? 'text-[#F5B942]'
                   : 'text-[#9CA3AF] hover:text-white'
               }`}
             >
-              Educational
+              <Globe className="w-3.5 h-3.5" />
+              <span>Global Mode</span>
             </button>
           </div>
         </div>
@@ -95,8 +105,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             type="search"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search Telugu channels..."
-            aria-label="Search Telugu channels"
+            placeholder={
+              playlistMode === 'global'
+                ? 'Search global channels, countries, or genres...'
+                : playlistMode === 'india'
+                  ? 'Search Indian channels...'
+                  : 'Search Telugu channels...'
+            }
+            aria-label="Search live channels"
             className="w-full h-10 bg-[#111827] border border-[#1F2937] focus:border-[#E50914] rounded-lg pl-10 pr-9 text-sm text-white placeholder-[#9CA3AF] focus:outline-none transition-colors"
           />
           {searchQuery && (

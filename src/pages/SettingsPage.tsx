@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Monitor,
   Volume2,
@@ -7,9 +7,10 @@ import {
   Check,
   Radio,
   RefreshCw,
+  Globe,
 } from 'lucide-react';
 import { Channel, PlayerSettings, PlaylistMode } from '../types/channel';
-import { IPTV_SOURCES } from '../data/data';
+import { EXTRA_GITHUB_PRESETS, IPTV_SOURCES } from '../data/data';
 import { ChannelEmblem } from '../components/ChannelEmblem';
 
 interface SettingsPageProps {
@@ -38,6 +39,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onNotify,
 }) => {
   const [selectedChannelId, setSelectedChannelId] = useState(channels[0]?.id ?? '');
+  const [channelPickerFilter, setChannelPickerFilter] = useState('');
   const [streamInput, setStreamInput] = useState(
     settings.customStreams[channels[0]?.id ?? ''] ?? ''
   );
@@ -45,8 +47,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     settings.customPlaylistUrl
   );
 
+  const pickerChannels = useMemo(() => {
+    const q = channelPickerFilter.trim().toLowerCase();
+    const matched = q
+      ? channels.filter(
+          (ch) =>
+            ch.name.toLowerCase().includes(q) ||
+            ch.region.toLowerCase().includes(q) ||
+            ch.channelNumber.includes(q)
+        )
+      : channels;
+    return matched.slice(0, 250);
+  }, [channels, channelPickerFilter]);
+
   useEffect(() => {
-    if (!selectedChannelId && channels.length > 0) {
+    if (
+      channels.length > 0 &&
+      (!selectedChannelId || !channels.some((c) => c.id === selectedChannelId))
+    ) {
       setSelectedChannelId(channels[0].id);
       setStreamInput(settings.customStreams[channels[0].id] ?? '');
     }
@@ -109,18 +127,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </p>
       </div>
 
-      {/* Live iptv-org Playlist Source Section */}
+      {/* Live Multi-GitHub Playlist Source Section */}
       <section className="rounded-2xl bg-[#171D2A] border border-[#1F2937] p-5 sm:p-6 flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <Radio className="w-5 h-5 text-[#E50914] mt-0.5 shrink-0" />
             <div>
               <h2 className="text-base font-semibold text-white">
-                Live Channel Source (iptv-org)
+                Live Multi-GitHub HLS Sources
               </h2>
               <p className="text-xs text-[#9CA3AF] mt-1 leading-relaxed">
-                Channels are fetched dynamically from open-source{' '}
-                <code className="font-mono text-[#F5B942]">iptv-org/iptv</code> M3U playlists—never hardcoded in components.
+                Channels are aggregated dynamically from open-source GitHub HLS playlists (
+                <code className="font-mono text-[#F5B942]">iptv-org/iptv</code>,{' '}
+                <code className="font-mono text-[#F5B942]">Free-TV/IPTV</code>, and{' '}
+                <code className="font-mono text-[#F5B942]">Samsung TV Plus / Pluto TV</code>).
               </p>
             </div>
           </div>
@@ -131,12 +151,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             className="self-start inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#111827] border border-[#1F2937] hover:border-[#374151] text-xs font-semibold text-white transition-colors whitespace-nowrap"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Sync Playlist</span>
+            <span>Sync Playlists</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(['telugu', 'india'] as PlaylistMode[]).map((mode) => {
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(['telugu', 'india', 'global'] as PlaylistMode[]).map((mode) => {
             const active =
               !settings.customPlaylistUrl && settings.playlistMode === mode;
             const meta = IPTV_SOURCES[mode];
@@ -153,11 +173,49 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     : 'bg-[#111827] border-[#1F2937] hover:border-[#374151] text-[#D1D5DB]'
                 }`}
               >
-                <div className="text-sm font-semibold text-white">{meta.label}</div>
-                <div className="text-xs text-[#9CA3AF] mt-1">{meta.description}</div>
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                  {mode === 'global' && <Globe className="w-4 h-4 text-[#F5B942]" />}
+                  <span>{meta.label}</span>
+                </div>
+                <div className="text-xs text-[#9CA3AF] mt-1 leading-relaxed">
+                  {meta.description}
+                </div>
               </button>
             );
           })}
+        </div>
+
+        {/* One-Click Additional GitHub HLS Repo Presets */}
+        <div className="pt-3 border-t border-[#1F2937] flex flex-col gap-2.5">
+          <p className="text-xs font-medium text-[#D1D5DB]">
+            Load Individual GitHub HLS Playlist Preset
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {EXTRA_GITHUB_PRESETS.map((preset) => {
+              const isSelected = settings.customPlaylistUrl === preset.url;
+              return (
+                <button
+                  key={preset.url}
+                  type="button"
+                  onClick={() => {
+                    setPlaylistUrlDraft(preset.url);
+                    onUpdateSettings({
+                      playlistMode: 'global',
+                      customPlaylistUrl: preset.url,
+                    });
+                    onNotify(`Loaded ${preset.label} (${preset.repo})`);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    isSelected
+                      ? 'bg-[#E50914]/15 border-[#E50914] text-white'
+                      : 'bg-[#111827] border-[#1F2937] hover:border-[#374151] text-[#D1D5DB] hover:text-white'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <form
@@ -168,7 +226,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             type="url"
             value={playlistUrlDraft}
             onChange={(e) => setPlaylistUrlDraft(e.target.value)}
-            placeholder="Optional custom M3U URL (e.g. https://iptv-org.github.io/iptv/languages/tel.m3u)"
+            placeholder="Optional custom GitHub or external M3U/M3U8 playlist URL..."
             aria-label="Custom M3U playlist URL"
             className="flex-1 h-11 px-3.5 rounded-lg bg-[#111827] border border-[#1F2937] focus:border-[#E50914] text-sm text-white placeholder-[#6B7280] focus:outline-none"
           />
@@ -182,7 +240,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </form>
 
         <p className="text-[11px] font-mono text-[#9CA3AF] truncate">
-          Active endpoint: {sourceUrl} ({channels.length} channels loaded)
+          Active source: {sourceUrl} ({channels.length.toLocaleString()} channels loaded)
         </p>
       </section>
 
@@ -321,6 +379,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
         </div>
 
+        {channels.length > 250 && (
+          <input
+            type="search"
+            value={channelPickerFilter}
+            onChange={(e) => setChannelPickerFilter(e.target.value)}
+            placeholder="Filter channel dropdown (showing up to 250 matches)..."
+            aria-label="Filter channel list for stream override"
+            className="w-full h-10 px-3.5 rounded-lg bg-[#111827] border border-[#1F2937] focus:border-[#E50914] text-xs text-white placeholder-[#6B7280] focus:outline-none"
+          />
+        )}
+
         <form
           onSubmit={handleStreamSubmit}
           className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1"
@@ -329,10 +398,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             value={selectedChannelId}
             onChange={(e) => handleChannelSelect(e.target.value)}
             aria-label="Select channel"
-            disabled={channels.length === 0}
+            disabled={pickerChannels.length === 0}
             className="md:col-span-4 h-11 px-3 rounded-lg bg-[#111827] border border-[#1F2937] text-sm text-white focus:border-[#E50914] focus:outline-none disabled:opacity-50"
           >
-            {channels.map((ch) => (
+            {pickerChannels.map((ch) => (
               <option key={ch.id} value={ch.id}>
                 {ch.channelNumber} · {ch.name}
               </option>

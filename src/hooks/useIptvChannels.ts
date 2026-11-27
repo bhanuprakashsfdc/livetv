@@ -8,6 +8,7 @@ interface UseIptvChannelsResult {
   loading: boolean;
   error: string | null;
   sourceUrl: string;
+  activeSources: string[];
   lastUpdated: number | null;
   refresh: () => void;
 }
@@ -21,6 +22,9 @@ export function useIptvChannels(
   const [error, setError] = useState<string | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string>(
     customPlaylistUrl?.trim() || IPTV_SOURCES[mode].url
+  );
+  const [activeSources, setActiveSources] = useState<string[]>(
+    IPTV_SOURCES[mode].sources.map((s) => s.name)
   );
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [refreshCounter, setRefreshCounter] = useState<number>(0);
@@ -37,12 +41,13 @@ export function useIptvChannels(
         });
         setChannels(result.channels);
         setSourceUrl(result.sourceUrl);
+        setActiveSources(result.activeSources);
         setLastUpdated(result.fetchedAt);
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : 'Unable to load channels from iptv-org playlist.'
+            : 'Unable to load channels from live GitHub IPTV playlists.'
         );
       } finally {
         setLoading(false);
@@ -64,6 +69,7 @@ export function useIptvChannels(
     loading,
     error,
     sourceUrl,
+    activeSources,
     lastUpdated,
     refresh,
   };

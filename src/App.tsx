@@ -78,6 +78,7 @@ export default function App() {
     loading,
     error,
     sourceUrl,
+    activeSources,
     refresh,
   } = useIptvChannels(settings.playlistMode, settings.customPlaylistUrl);
 
@@ -182,8 +183,10 @@ export default function App() {
       handleUpdateSettings({ playlistMode: mode, customPlaylistUrl: '' });
       notify(
         mode === 'telugu'
-          ? 'Switched to Telugu Live (iptv-org/languages/tel.m3u)'
-          : 'Switched to India Mode (iptv-org/countries/in.m3u)'
+          ? 'Switched to Telugu Live (iptv-org + Free-TV)'
+          : mode === 'india'
+            ? 'Switched to India Mode (Free-TV + iptv-org)'
+            : 'Switched to Global Mode (Free-TV + Samsung TV Plus + Pluto TV + iptv-org)'
       );
     },
     [handleUpdateSettings, notify]
@@ -233,8 +236,10 @@ export default function App() {
       <div className="lg:pl-64 min-h-screen flex flex-col">
         <TopHeader
           searchQuery={globalSearch}
+          playlistMode={settings.playlistMode}
           onSearchChange={handleSearchChange}
           onSearchSubmit={handleSearchSubmit}
+          onChangePlaylistMode={handleChangePlaylistMode}
           onOpenDrawer={() => setDrawerOpen(true)}
           onNavigate={navigate}
           route={route}
@@ -247,6 +252,7 @@ export default function App() {
               loading={loading}
               error={error}
               playlistMode={settings.playlistMode}
+              activeSources={activeSources}
               favoriteIds={favoriteIds}
               watchHistory={watchHistory}
               customStreams={settings.customStreams}
@@ -306,6 +312,7 @@ export default function App() {
               channels={channels}
               loading={loading}
               playlistMode={settings.playlistMode}
+              activeSources={activeSources}
               initialCategory={route.category}
               favoriteIds={favoriteIds}
               customStreams={settings.customStreams}
@@ -320,6 +327,7 @@ export default function App() {
           {route.view === 'search' && (
             <SearchPage
               query={globalSearch}
+              playlistMode={settings.playlistMode}
               channels={channels}
               favoriteIds={favoriteIds}
               customStreams={settings.customStreams}

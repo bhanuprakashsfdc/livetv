@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
-import { Search, Tv } from 'lucide-react';
-import { Channel } from '../types/channel';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Search, Tv, ChevronDown } from 'lucide-react';
+import { Channel, PlaylistMode } from '../types/channel';
 import { ChannelCard } from '../components/ChannelCard';
 
 interface SearchPageProps {
   query: string;
+  playlistMode: PlaylistMode;
   channels: Channel[];
   favoriteIds: string[];
   customStreams: Record<string, string>;
@@ -13,7 +14,7 @@ interface SearchPageProps {
   onToggleFavorite: (channelId: string) => void;
 }
 
-const SUGGESTED_TERMS = [
+const TELUGU_SUGGESTIONS = [
   'TV9',
   'DD Saptagiri',
   'News',
@@ -23,8 +24,22 @@ const SUGGESTED_TERMS = [
   '1080p',
 ];
 
+const GLOBAL_SUGGESTIONS = [
+  'BBC',
+  'Al Jazeera',
+  'Euronews',
+  'Bloomberg',
+  'Movies',
+  'News',
+  'India',
+  'United States',
+];
+
+const PAGE_SIZE = 40;
+
 export const SearchPage: React.FC<SearchPageProps> = ({
   query,
+  playlistMode,
   channels,
   favoriteIds,
   customStreams,
@@ -32,6 +47,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   onWatchChannel,
   onToggleFavorite,
 }) => {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [query, playlistMode]);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return channels;
@@ -43,15 +64,29 @@ export const SearchPage: React.FC<SearchPageProps> = ({
         ch.rawGroupTitle.toLowerCase().includes(q) ||
         ch.tvgId.toLowerCase().includes(q) ||
         ch.quality.toLowerCase().includes(q) ||
-        ch.region.toLowerCase().includes(q)
+        ch.region.toLowerCase().includes(q) ||
+        ch.country.toLowerCase().includes(q) ||
+        ch.sourceName.toLowerCase().includes(q)
     );
   }, [query, channels]);
+
+  const visibleResults = useMemo(
+    () => results.slice(0, visibleCount),
+    [results, visibleCount]
+  );
+
+  const suggestions =
+    playlistMode === 'global' ? GLOBAL_SUGGESTIONS : TELUGU_SUGGESTIONS;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <h1 className="font-bold text-2xl sm:text-3xl text-white tracking-tight">
-          Search Telugu Channels
+          {playlistMode === 'global'
+            ? 'Search Global Channels'
+            : playlistMode === 'india'
+              ? 'Search Indian Channels'
+              : 'Search Telugu Channels'}
         </h1>
         <div className="relative max-w-xl">
           <Search
@@ -62,15 +97,19 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             type="search"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search Telugu channels..."
-            aria-label="Search Telugu channels"
+            placeholder={
+              playlistMode === 'global'
+                ? 'Search global channels, countries, or GitHub sources...'
+                : 'Search live channels...'
+            }
+            aria-label="Search live channels"
             className="w-full h-12 bg-[#111827] border border-[#1F2937] focus:border-[#E50914] rounded-xl pl-11 pr-4 text-sm text-white placeholder-[#9CA3AF] focus:outline-none"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-[#9CA3AF] mr-1">Quick searches:</span>
-          {SUGGESTED_TERMS.map((term) => (
+          {suggestions.map((term) => (
             <button
               key={term}
               type="button"
@@ -86,11 +125,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       <div className="text-xs text-[#9CA3AF] tabular-nums">
         {query.trim() ? (
           <>
-            Found <strong className="text-white">{results.length}</strong>{' '}
+            Found <strong className="text-white">{results.length.toLocaleString()}</strong>{' '}
             {results.length === 1 ? 'channel' : 'channels'} for &ldquo;{query.trim()}&rdquo;
           </>
         ) : (
-          <>Showing all {results.length} live channels</>
+          <>
+            Showing {visibleResults.length.toLocaleString()} of{' '}
+            {results.length.toLocaleString()} live channels
+          </>
         )}
       </div>
 
@@ -100,10 +142,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <Tv className="w-6 h-6 text-[#9CA3AF]" />
           </div>
           <h2 className="text-base font-semibold text-white">
-            No matching Telugu channels found
+            No matching channels found
           </h2>
           <p className="text-sm text-[#9CA3AF] max-w-md">
-            We couldn&apos;t find any channel matching &ldquo;{query}&rdquo;. Try searching by channel name (like DD Saptagiri, TV9, SVBC) or genre (News, Devotional, Movies).
+            We couldn&apos;t find any channel matching &ldquo;{query}&rdquo;. Try searching by channel name, country, genre, or source.
           </p>
           <button
             type="button"
@@ -114,19 +156,36 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {results.map((channel) => (
-            <ChannelCard
-              key={channel.id}
-              channel={channel}
-              variant="directory-list"
-              isFavorite={favoriteIds.includes(channel.id)}
-              hasCustomStream={Boolean(customStreams[channel.id])}
-              onWatch={onWatchChannel}
-              onToggleFavorite={onToggleFavorite}
-            />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-col gap-3">
+            {visibleResults.map((channel) => (
+              <ChannelCard
+                key={channel.id}
+                channel={channel}
+                variant="directory-list"
+                isFavorite={favoriteIds.includes(channel.id)}
+                hasCustomStream={Boolean(customStreams[channel.id])}
+                onWatch={onWatchChannel}
+                onToggleFavorite={onToggleFavorite}
+              />
+            ))}
+          </div>
+
+          {visibleCount < results.length && (
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#171D2A] border border-[#2C364B] hover:border-[#374151] hover:bg-[#1E2636] text-sm font-semibold text-white transition-colors tabular-nums"
+              >
+                <ChevronDown className="w-4 h-4 text-[#F5B942]" />
+                <span>
+                  Load More Results ({(results.length - visibleCount).toLocaleString()} remaining)
+                </span>
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

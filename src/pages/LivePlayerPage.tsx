@@ -56,10 +56,15 @@ export const LivePlayerPage: React.FC<LivePlayerPageProps> = ({
 }) => {
   const [switcherFilter, setSwitcherFilter] = useState<'All' | ChannelCategory>('All');
   const [switcherQuery, setSwitcherQuery] = useState('');
+  const [switcherLimit, setSwitcherLimit] = useState(60);
 
   const isFavorite = favoriteIds.includes(channel.id);
   const resolvedStreamUrl =
     settings.customStreams[channel.id] ?? channel.streamUrl;
+
+  useEffect(() => {
+    setSwitcherLimit(60);
+  }, [switcherFilter, switcherQuery, channels.length]);
 
   const filteredChannels = useMemo(() => {
     return channels.filter((item) => {
@@ -71,10 +76,17 @@ export const LivePlayerPage: React.FC<LivePlayerPageProps> = ({
         item.name.toLowerCase().includes(q) ||
         item.category.toLowerCase().includes(q) ||
         item.subGenre.toLowerCase().includes(q) ||
+        item.region.toLowerCase().includes(q) ||
+        item.sourceName.toLowerCase().includes(q) ||
         item.channelNumber.includes(q);
       return matchesCategory && matchesQuery;
     });
   }, [channels, switcherFilter, switcherQuery]);
+
+  const visibleSwitcherChannels = useMemo(
+    () => filteredChannels.slice(0, switcherLimit),
+    [filteredChannels, switcherLimit]
+  );
 
   const currentIndex = channels.findIndex((c) => c.id === channel.id);
 
@@ -295,10 +307,10 @@ export const LivePlayerPage: React.FC<LivePlayerPageProps> = ({
                     Source Directory
                   </p>
                   <p className="text-sm font-semibold text-white truncate mt-0.5">
-                    iptv-org Public M3U
+                    {channel.sourceName} Public M3U
                   </p>
                   <p className="text-xs text-[#9CA3AF] mt-0.5">
-                    {channel.language} · {channel.country}
+                    {channel.region} · {channel.country}
                   </p>
                 </div>
               </div>
@@ -362,57 +374,71 @@ export const LivePlayerPage: React.FC<LivePlayerPageProps> = ({
                 No channels match &ldquo;{switcherQuery}&rdquo;.
               </div>
             ) : (
-              filteredChannels.map((item) => {
-                const isCurrent = item.id === channel.id;
-                const itemHasCustom = Boolean(settings.customStreams[item.id]);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSelectChannel(item)}
-                    aria-current={isCurrent ? 'true' : undefined}
-                    className={`w-full p-3.5 flex items-center justify-between gap-3 text-left transition-colors ${
-                      isCurrent ? 'bg-[#1E2636]' : 'hover:bg-[#171D2A]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <ChannelEmblem
-                        shortCode={item.shortCode}
-                        accentColor={item.accentColor}
-                        logo={item.logo}
-                        name={item.name}
-                        size="sm"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-white truncate">
-                            {item.name}
-                          </span>
-                          {isCurrent && (
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#F5B942] shrink-0">
-                              Watching
+              <>
+                {visibleSwitcherChannels.map((item) => {
+                  const isCurrent = item.id === channel.id;
+                  const itemHasCustom = Boolean(settings.customStreams[item.id]);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onSelectChannel(item)}
+                      aria-current={isCurrent ? 'true' : undefined}
+                      className={`w-full p-3.5 flex items-center justify-between gap-3 text-left transition-colors ${
+                        isCurrent ? 'bg-[#1E2636]' : 'hover:bg-[#171D2A]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <ChannelEmblem
+                          shortCode={item.shortCode}
+                          accentColor={item.accentColor}
+                          logo={item.logo}
+                          name={item.name}
+                          size="sm"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-white truncate">
+                              {item.name}
                             </span>
-                          )}
+                            {isCurrent && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#F5B942] shrink-0">
+                                Watching
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[#9CA3AF] truncate mt-0.5">
+                            {item.category} · {item.quality} · {item.region}
+                          </p>
                         </div>
-                        <p className="text-xs text-[#9CA3AF] truncate mt-0.5">
-                          {item.category} · {item.quality} · {item.subGenre}
-                        </p>
                       </div>
-                    </div>
 
-                    <div className="flex flex-col items-end shrink-0 gap-1">
-                      <span className="text-[11px] font-mono tabular-nums text-[#9CA3AF]">
-                        {item.channelNumber}
-                      </span>
-                      {itemHasCustom && (
-                        <span className="text-[10px] font-medium text-[#34D399]">
-                          Custom
+                      <div className="flex flex-col items-end shrink-0 gap-1">
+                        <span className="text-[11px] font-mono tabular-nums text-[#9CA3AF]">
+                          {item.channelNumber}
                         </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
+                        {itemHasCustom && (
+                          <span className="text-[10px] font-medium text-[#34D399]">
+                            Custom
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {switcherLimit < filteredChannels.length && (
+                  <div className="p-3">
+                    <button
+                      type="button"
+                      onClick={() => setSwitcherLimit((prev) => prev + 80)}
+                      className="w-full py-2.5 px-3 rounded-lg bg-[#171D2A] border border-[#2C364B] hover:border-[#374151] text-xs font-semibold text-white transition-colors tabular-nums"
+                    >
+                      Show more ({(filteredChannels.length - switcherLimit).toLocaleString()} more)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </aside>

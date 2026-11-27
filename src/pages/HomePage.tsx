@@ -34,6 +34,7 @@ interface HomePageProps {
   loading: boolean;
   error: string | null;
   playlistMode: PlaylistMode;
+  activeSources: string[];
   favoriteIds: string[];
   watchHistory: WatchHistoryEntry[];
   customStreams: Record<string, string>;
@@ -49,6 +50,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   loading,
   error,
   playlistMode,
+  activeSources,
   favoriteIds,
   watchHistory,
   customStreams,
@@ -100,21 +102,33 @@ export const HomePage: React.FC<HomePageProps> = ({
             <LiveBadge label="LIVE NOW" size="md" />
             <span className="text-xs text-[#D1D5DB] font-medium tabular-nums">
               {loading
-                ? 'Syncing live iptv-org lineup...'
-                : `${channels.length} ${IPTV_SOURCES[playlistMode].label} channels`}
+                ? `Syncing ${IPTV_SOURCES[playlistMode].label} GitHub HLS playlists...`
+                : `${channels.length.toLocaleString()} ${IPTV_SOURCES[playlistMode].label} channels${
+                    activeSources.length > 0 ? ` · ${activeSources.join(' + ')}` : ''
+                  }`}
             </span>
           </div>
 
           <h1 className="font-bold text-3xl sm:text-4xl lg:text-[48px] leading-[1.12] tracking-[-0.02em] text-white">
-            Watch Telugu TV Live
+            {playlistMode === 'global'
+              ? 'Watch Global TV Live'
+              : playlistMode === 'india'
+                ? 'Watch Indian TV Live'
+                : 'Watch Telugu TV Live'}
           </h1>
 
           <p className="text-base sm:text-xl font-medium text-[#E5E7EB]">
-            Your favorite Telugu channels, all in one place.
+            {playlistMode === 'global'
+              ? 'Worldwide live channels from Free-TV, iptv-org, Samsung TV Plus & Pluto TV.'
+              : playlistMode === 'india'
+                ? 'Indian national & regional live channels, all in one place.'
+                : 'Your favorite Telugu channels, all in one place.'}
           </p>
 
           <p className="text-sm sm:text-base text-[#9CA3AF] max-w-xl leading-relaxed">
-            All Your Favorite Telugu TV Channels. One Place. Free to Watch.
+            {playlistMode === 'global'
+              ? 'Explore thousands of free-to-air & FAST live HLS broadcasts across 100+ countries with multi-source GitHub failover.'
+              : 'All Your Favorite Telugu TV Channels. One Place. Free to Watch.'}
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -136,10 +150,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#171D2A]/90 backdrop-blur-md border border-[#2C364B] hover:bg-[#1E2636] hover:border-[#374151] text-white text-sm font-semibold transition-colors whitespace-nowrap"
             >
               <Compass className="w-4 h-4 text-[#F5B942]" />
-              <span>Explore Channels</span>
+              <span>All Channels</span>
             </button>
 
-            {/* StreamHub-inspired Telugu / India Mode Switcher */}
+            {/* Telugu / India / Global Mode Switcher */}
             <div
               className="inline-flex items-center p-1 rounded-lg bg-[#080B12]/80 backdrop-blur-md border border-[#2C364B]"
               role="group"
@@ -159,14 +173,25 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 onClick={() => onChangePlaylistMode('india')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
                   playlistMode === 'india'
                     ? 'bg-[#E50914] text-white'
                     : 'text-[#9CA3AF] hover:text-white'
                 }`}
               >
+                India Mode
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangePlaylistMode('global')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
+                  playlistMode === 'global'
+                    ? 'bg-[#E50914] text-white'
+                    : 'text-[#9CA3AF] hover:text-white'
+                }`}
+              >
                 <Globe className="w-3.5 h-3.5" />
-                <span>India Mode</span>
+                <span>Global Mode</span>
               </button>
             </div>
           </div>

@@ -7,12 +7,13 @@ export type ChannelCategory =
   | 'Kids'
   | 'Educational';
 
-export type PlaylistMode = 'telugu' | 'india';
+export type PlaylistMode = 'telugu' | 'india' | 'global';
 
 export interface StreamVariant {
   url: string;
   quality: string;
   label: string;
+  sourceName: string;
   isGeoBlocked: boolean;
   not247: boolean;
 }
@@ -30,6 +31,7 @@ export interface Channel {
   subGenre: string;
   language: string;
   country: string;
+  sourceName: string;
   logo: string;
   thumbnail: string;
   streamType: 'hls' | 'embed';
