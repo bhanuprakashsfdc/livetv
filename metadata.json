@@ -1,0 +1,8 @@
+{
+  "name": "Telugu Live TV",
+  "description": "Mana Telugu Entertainment — Discover and watch free-to-air Telugu television channels live across News, Entertainment, Movies, Devotional, Music, Kids, and Education.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

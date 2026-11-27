@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-canvas: #080B12;
+  --color-surface: #111827;
+  --color-card: #171D2A;
+  --color-card-hover: #1E2636;
+  --color-accent: #E50914;
+  --color-accent-hover: #C50812;
+  --color-gold: #F5B942;
+  --color-muted: #9CA3AF;
+  --color-border-subtle: #1F2937;
+}
+
+@layer base {
+  html {
+    background-color: #080B12;
+    color: #FFFFFF;
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #080B12;
+    color: #FFFFFF;
+    overscroll-behavior-y: none;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  button, a, input, select {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* High-visibility focus rings for Keyboard & Smart TV Remote navigation */
+  *:focus-visible {
+    outline: 2px solid #F5B942;
+    outline-offset: 2px;
+  }
+}
+
+.tv-mode {
+  font-size: 112%;
+}
+
+.tv-mode *:focus-visible {
+  outline: 3px solid #F5B942;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(245, 185, 66, 0.2);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
